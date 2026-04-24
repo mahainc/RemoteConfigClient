@@ -27,7 +27,6 @@ extension RemoteConfigClient {
         public var interstitials: Interstitials
         public var rewards: Rewards
         public var natives: Natives
-        public var placementGates: PlacementGates
 
         public init(
             schemaVersion: Int = 2,
@@ -35,8 +34,7 @@ extension RemoteConfigClient {
             appOpens: AppOpens = .init(),
             interstitials: Interstitials = .init(),
             rewards: Rewards = .init(),
-            natives: Natives = .init(),
-            placementGates: PlacementGates = .init()
+            natives: Natives = .init()
         ) {
             self.schemaVersion = schemaVersion
             self.global = global
@@ -44,7 +42,6 @@ extension RemoteConfigClient {
             self.interstitials = interstitials
             self.rewards = rewards
             self.natives = natives
-            self.placementGates = placementGates
         }
 
         public init(from decoder: Decoder) throws {
@@ -55,11 +52,10 @@ extension RemoteConfigClient {
             interstitials = try c.decodeIfPresent(Interstitials.self, forKey: .interstitials) ?? .init()
             rewards = try c.decodeIfPresent(Rewards.self, forKey: .rewards) ?? .init()
             natives = try c.decodeIfPresent(Natives.self, forKey: .natives) ?? .init()
-            placementGates = try c.decodeIfPresent(PlacementGates.self, forKey: .placementGates) ?? .init()
         }
 
         enum CodingKeys: String, CodingKey {
-            case schemaVersion, global, appOpens, interstitials, rewards, natives, placementGates
+            case schemaVersion, global, appOpens, interstitials, rewards, natives
         }
     }
 }
@@ -356,38 +352,6 @@ extension RemoteConfigClient.AdConfigV2 {
         }
     }
 
-    public struct PlacementGates: Codable, Sendable, Equatable {
-        public var native: NativeGates
-
-        public init(native: NativeGates = .init()) {
-            self.native = native
-        }
-
-        public init(from decoder: Decoder) throws {
-            let c = try decoder.container(keyedBy: CodingKeys.self)
-            native = try c.decodeIfPresent(NativeGates.self, forKey: .native) ?? .init()
-        }
-
-        enum CodingKeys: String, CodingKey { case native }
-
-        public struct NativeGates: Codable, Sendable, Equatable {
-            public var appearance: Bool
-            public var languageSettings: Bool
-
-            public init(appearance: Bool = false, languageSettings: Bool = false) {
-                self.appearance = appearance
-                self.languageSettings = languageSettings
-            }
-
-            public init(from decoder: Decoder) throws {
-                let c = try decoder.container(keyedBy: CodingKeys.self)
-                appearance = try c.decodeIfPresent(Bool.self, forKey: .appearance) ?? false
-                languageSettings = try c.decodeIfPresent(Bool.self, forKey: .languageSettings) ?? false
-            }
-
-            enum CodingKeys: String, CodingKey { case appearance, languageSettings }
-        }
-    }
 }
 
 // MARK: - Placement primitives
@@ -548,9 +512,14 @@ extension RemoteConfigClient.AdConfigV2 {
             id: natives.fallback.adUnitId,
             enable: natives.fallback.enabled,
             opacity: 0,
+            // Legacy `nativeAll.extraKeys` toggled per-screen render gates in v1.
+            // v2 dropped the gate layer — these stay hard-coded to false so any
+            // surviving v1 consumer (via toLegacy) treats native-ad screen gates
+            // as off. The flow was only read by MobileAdsClientUI.NativeAdFeature,
+            // which isn't used in this app.
             extraKeys: [
-                "nativeAppearance": placementGates.native.appearance,
-                "nativeLanguageSetting": placementGates.native.languageSettings,
+                "nativeAppearance": false,
+                "nativeLanguageSetting": false,
             ]
         )
 
