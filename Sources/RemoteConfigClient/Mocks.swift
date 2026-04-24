@@ -12,7 +12,7 @@ extension RemoteConfigClient: TestDependencyKey {
     public static var testValue: Self {
         Self()
     }
-    
+
     public static var previewValue: Self {
         Self()
     }
@@ -21,12 +21,28 @@ extension RemoteConfigClient: TestDependencyKey {
 extension RemoteConfigClient {
     public static let happyPath: Self = {
         return .init(
-            editorChoices: {
-				RemoteConfigClient.EditorChoice.all
+            adConfigV2: {
+                AdConfigV2()
             },
-            photoSelectionLimitNumber: {
-                20
-            }
+            adConfigV2Updates: {
+                AsyncStream { continuation in
+                    continuation.yield(AdConfigV2())
+                    continuation.finish()
+                }
+            },
+            adConfig: {
+                RemoteConfigClient.AdConfig()
+            },
+            adConfigUpdates: {
+                AsyncStream { continuation in
+                    continuation.yield(RemoteConfigClient.AdConfig())
+                    continuation.finish()
+                }
+            },
+            fetchAndActivate: {
+                // No-op in happy path.
+            },
+            fetchAndActivateOrUseCache: { }
         )
     }()
 }

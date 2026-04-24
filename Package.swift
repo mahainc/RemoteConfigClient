@@ -6,7 +6,7 @@ import PackageDescription
 let package = Package(
     name: "RemoteConfigClient",
     platforms: [
-		.iOS(.v15), .macOS(.v10_15)
+		.iOS(.v16), .macOS(.v13)
     ],
     products: [
         .singleTargetLibrary("RemoteConfigClient"),
@@ -30,6 +30,10 @@ let package = Package(
                 .product(name: "FirebaseRemoteConfig", package: "firebase-ios-sdk"),
                 "RemoteConfigClient"
             ]
+        ),
+        .testTarget(
+            name: "RemoteConfigClientTests",
+            dependencies: ["RemoteConfigClient"]
         ),
     ]
 )
