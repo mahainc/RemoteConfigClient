@@ -325,32 +325,34 @@ extension RemoteConfigClient.AdConfigV2 {
 
     public struct Natives: Codable, Sendable, Equatable {
         public var fallback: NativePlacement
-        public var languageOnboarding: NativePlacement
-        public var languageSettings: NativePlacement
+        /// Native shown on the language screen in its idle state (no row tapped yet).
+        public var language: NativePlacement
+        /// Native shown on the same language screen after the user taps a language row.
+        public var languageSelected: NativePlacement
         public var intro: [String: NativePlacement]
 
         public init(
             fallback: NativePlacement = .init(),
-            languageOnboarding: NativePlacement = .init(),
-            languageSettings: NativePlacement = .init(),
+            language: NativePlacement = .init(),
+            languageSelected: NativePlacement = .init(),
             intro: [String: NativePlacement] = [:]
         ) {
             self.fallback = fallback
-            self.languageOnboarding = languageOnboarding
-            self.languageSettings = languageSettings
+            self.language = language
+            self.languageSelected = languageSelected
             self.intro = intro
         }
 
         public init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             fallback = try c.decodeIfPresent(NativePlacement.self, forKey: .fallback) ?? .init()
-            languageOnboarding = try c.decodeIfPresent(NativePlacement.self, forKey: .languageOnboarding) ?? .init()
-            languageSettings = try c.decodeIfPresent(NativePlacement.self, forKey: .languageSettings) ?? .init()
+            language = try c.decodeIfPresent(NativePlacement.self, forKey: .language) ?? .init()
+            languageSelected = try c.decodeIfPresent(NativePlacement.self, forKey: .languageSelected) ?? .init()
             intro = try c.decodeIfPresent([String: NativePlacement].self, forKey: .intro) ?? [:]
         }
 
         enum CodingKeys: String, CodingKey {
-            case fallback, languageOnboarding, languageSettings, intro
+            case fallback, language, languageSelected, intro
         }
     }
 
@@ -558,8 +560,8 @@ extension RemoteConfigClient.AdConfigV2 {
             interSplash: splashInterUnit,
             interAll: interAllUnit,
             interRecorder: legacyUnit(from: interstitials.recorder),
-            nativeLanguage: legacyUnit(from: natives.languageOnboarding),
-            nativeLanguageSelect: legacyUnit(from: natives.languageSettings),
+            nativeLanguage: legacyUnit(from: natives.language),
+            nativeLanguageSelect: legacyUnit(from: natives.languageSelected),
             nativeIntro1: legacyUnit(from: natives.intro["1"] ?? .init()),
             nativeFullIntro2: legacyUnit(from: natives.intro["2"] ?? .init()),
             nativeFullIntro3: legacyUnit(from: natives.intro["3"] ?? .init()),
