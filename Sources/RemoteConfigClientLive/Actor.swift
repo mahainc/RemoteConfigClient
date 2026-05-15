@@ -23,11 +23,21 @@ actor RemoteConfigActor {
         #else
         settings.minimumFetchInterval = 3600
         #endif
-        RemoteConfig.remoteConfig().configSettings = settings
+        let rc = RemoteConfig.remoteConfig()
+        rc.configSettings = settings
 
-        RemoteConfig.remoteConfig().addOnConfigUpdateListener { configUpdate, error in
+        // Auto-load bundled defaults so `configValue(forKey:)` returns real
+        // values on the very first call — before any fetchAndActivate
+        // completes. Eliminates the cold-start race where decodeAdConfigV2()
+        // sees an empty raw and falls back to a default-constructed value.
+        // Apps that don't ship the plist behave exactly as before.
+        if Bundle.main.path(forResource: "RemoteConfigDefaults", ofType: "plist") != nil {
+            rc.setDefaults(fromPlist: "RemoteConfigDefaults")
+        }
+
+        rc.addOnConfigUpdateListener { configUpdate, error in
             guard error == nil else { return }
-            RemoteConfig.remoteConfig().activate { changed, error in
+            rc.activate { changed, error in
                 guard error == nil else { return }
                 Task {
                     await self.handleConfigUpdate()
@@ -54,10 +64,21 @@ extension RemoteConfigActor {
         if let cached = cachedAdConfigV2 {
             return cached
         }
-        let decoded = try decodeConfigs()
-        cachedAdConfig = decoded.v1
-        cachedAdConfigV2 = decoded.v2
-        return decoded.v2
+        // Try v2 raw first; this serves bundled defaults from setDefaults(fromPlist:)
+        // when an app ships them and the network fetch hasn't activated values yet.
+        if let v2 = try decodeAdConfigV2() {
+            cachedAdConfigV2 = v2
+            cachedAdConfig = v2.toLegacy()
+            return v2
+        }
+        // No v2 raw available. Fall back to the v1 legacy path; if that also has
+        // no raw, decodeAdConfigV1 throws — the caller sees the failure honestly
+        // rather than getting a silently-fabricated empty struct.
+        let v1 = try decodeAdConfigV1()
+        cachedAdConfig = v1
+        let v2 = RemoteConfigClient.AdConfigV2()
+        cachedAdConfigV2 = v2
+        return v2
     }
 
     /// Yields the currently-cached v1 `AdConfig` (if any) immediately, then re-emits
@@ -97,16 +118,25 @@ extension RemoteConfigActor {
             }
         }
 
-        // Refresh eagerly and fan out to every active subscriber on both streams.
+        // Cache only when we actually have v2 values. Empty raw after the SDK
+        // success callback means the fetch returned nothing usable (a known
+        // cold-start race in Firebase RC). Leaving cache nil lets the next
+        // getAdConfigV2() lazy-read configValue, which serves bundled defaults
+        // via setDefaults(fromPlist:) when an app ships them.
         do {
-            let decoded = try decodeConfigs()
-            cachedAdConfig = decoded.v1
-            cachedAdConfigV2 = decoded.v2
+            guard let v2 = try decodeAdConfigV2() else {
+                #if DEBUG
+                print("[RemoteConfigActor] fetchAndActivate: SDK success but ad_config_v2 raw empty; cache stays nil for setDefaults fallback")
+                #endif
+                return
+            }
+            cachedAdConfig = v2.toLegacy()
+            cachedAdConfigV2 = v2
             for continuation in adConfigContinuations.values {
-                continuation.yield(decoded.v1)
+                continuation.yield(v2.toLegacy())
             }
             for continuation in adConfigV2Continuations.values {
-                continuation.yield(decoded.v2)
+                continuation.yield(v2)
             }
         } catch {
             cachedAdConfig = nil
@@ -150,15 +180,22 @@ extension RemoteConfigActor {
     }
 
     private func handleConfigUpdate() async {
+        // Same contract as fetchAndActivate: only cache when v2 raw has real
+        // values; never fabricate an empty-struct fallback.
         do {
-            let decoded = try decodeConfigs()
-            cachedAdConfig = decoded.v1
-            cachedAdConfigV2 = decoded.v2
+            guard let v2 = try decodeAdConfigV2() else {
+                #if DEBUG
+                print("[RemoteConfigActor] handleConfigUpdate: ad_config_v2 raw empty after listener fire; ignoring")
+                #endif
+                return
+            }
+            cachedAdConfig = v2.toLegacy()
+            cachedAdConfigV2 = v2
             for continuation in adConfigContinuations.values {
-                continuation.yield(decoded.v1)
+                continuation.yield(v2.toLegacy())
             }
             for continuation in adConfigV2Continuations.values {
-                continuation.yield(decoded.v2)
+                continuation.yield(v2)
             }
         } catch {
             #if DEBUG
@@ -208,12 +245,23 @@ extension RemoteConfigActor {
 
     nonisolated private func decodeAdConfigV1() throws -> RemoteConfigClient.AdConfig {
         let raw = RemoteConfig.remoteConfig().configValue(forKey: "ad_config").stringValue
-        guard let data = raw.data(using: .utf8), !raw.isEmpty else {
-            return RemoteConfigClient.AdConfig()
+        guard !raw.isEmpty, let data = raw.data(using: .utf8) else {
+            // Throw instead of silently returning a default-constructed struct.
+            // Callers that catch this (fetchAndActivate, getAdConfigV2, etc.)
+            // can decide to use bundled defaults or surface the failure.
+            throw RemoteConfigDecodeError.emptyRawValue
         }
         #if DEBUG
         print("[RemoteConfigActor] served ad_config (v1 fallback)")
         #endif
         return try JSONDecoder().decode(RemoteConfigClient.AdConfig.self, from: data)
     }
+}
+
+/// Surfaces an empty configValue raw to callers instead of letting them
+/// receive a silently-fabricated default struct. With this error, the
+/// "use defaults on error" semantic falls naturally out of the catch path
+/// (cache stays nil → next lazy decode hits setDefaults' bundled values).
+enum RemoteConfigDecodeError: Error {
+    case emptyRawValue
 }
