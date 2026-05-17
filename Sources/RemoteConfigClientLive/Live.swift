@@ -1,5 +1,6 @@
 
 import Dependencies
+@preconcurrency import FirebaseRemoteConfig
 import RemoteConfigClient
 
 extension RemoteConfigClient: DependencyKey {
@@ -29,6 +30,25 @@ extension RemoteConfigClient: DependencyKey {
                     print("[RemoteConfigClient] fetchAndActivate failed: \(error.localizedDescription); using cached/default values")
                     #endif
                 }
+            },
+            value: { key in
+                let rcValue = RemoteConfig.remoteConfig().configValue(forKey: key)
+                let source: RemoteValue.Source = {
+                    switch rcValue.source {
+                    case .remote:  return .remote
+                    case .default: return .default
+                    case .static:  return .static
+                    @unknown default: return .static
+                    }
+                }()
+                return RemoteValue(
+                    stringValue: rcValue.stringValue,
+                    intValue: rcValue.numberValue.intValue,
+                    boolValue: rcValue.boolValue,
+                    doubleValue: rcValue.numberValue.doubleValue,
+                    dataValue: rcValue.dataValue,
+                    source: source
+                )
             }
         )
     }

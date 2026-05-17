@@ -42,7 +42,8 @@ extension RemoteConfigClient {
             fetchAndActivate: {
                 // No-op in happy path.
             },
-            fetchAndActivateOrUseCache: { }
+            fetchAndActivateOrUseCache: { },
+            value: { _ in RemoteValue() }
         )
     }()
 }

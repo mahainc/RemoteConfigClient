@@ -1,7 +1,42 @@
 // The Swift Programming Language
 // https://docs.swift.org/swift-book
 
+import Foundation
 import DependenciesMacros
+
+/// Type-erased view over a single Remote Config entry. Mirrors Firebase's
+/// `RemoteConfigValue` accessors so callers pick the type they need; missing
+/// keys return a zero-valued struct with `source == .static`.
+public struct RemoteValue: Sendable, Equatable {
+    public let stringValue: String
+    public let intValue: Int
+    public let boolValue: Bool
+    public let doubleValue: Double
+    public let dataValue: Data
+    public let source: Source
+
+    public enum Source: Sendable, Equatable {
+        case remote
+        case `default`
+        case `static`
+    }
+
+    public init(
+        stringValue: String = "",
+        intValue: Int = 0,
+        boolValue: Bool = false,
+        doubleValue: Double = 0,
+        dataValue: Data = Data(),
+        source: Source = .static
+    ) {
+        self.stringValue = stringValue
+        self.intValue = intValue
+        self.boolValue = boolValue
+        self.doubleValue = doubleValue
+        self.dataValue = dataValue
+        self.source = source
+    }
+}
 
 @DependencyClient
 public struct RemoteConfigClient: Sendable {
@@ -22,4 +57,9 @@ public struct RemoteConfigClient: Sendable {
     /// Use this from splash / app-launch code when you'd rather fall back to the last
     /// known config than surface a user-visible error.
     public var fetchAndActivateOrUseCache: @Sendable () async -> Void = { }
+
+    /// Reads any top-level Remote Config key as a `RemoteValue`. Returns a
+    /// zero-valued struct with `source == .static` when the key is absent.
+    /// Use the typed accessors (`intValue`, `stringValue`, …) to extract.
+    public var value: @Sendable (_ key: String) async -> RemoteValue = { _ in RemoteValue() }
 }
