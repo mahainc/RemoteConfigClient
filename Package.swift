@@ -13,20 +13,25 @@ let package = Package(
         .singleTargetLibrary("RemoteConfigClientLive"),
     ],
     dependencies: [
-        .package(url: "https://github.com/pointfreeco/swift-composable-architecture.git", branch: "main"),
-        .package(url: "https://github.com/firebase/firebase-ios-sdk.git", branch: "main"),
+        .package(url: "https://github.com/pointfreeco/swift-dependencies.git", from: "1.9.0"),
+        .package(url: "https://github.com/pointfreeco/swift-case-paths.git", from: "1.5.0"),
+        .package(url: "https://github.com/firebase/firebase-ios-sdk.git", from: "12.13.0"),
     ],
     targets: [
         .target(
             name: "RemoteConfigClient",
             dependencies: [
-                .product(name: "ComposableArchitecture", package: "swift-composable-architecture"),
+                .product(name: "Dependencies", package: "swift-dependencies"),
+                .product(name: "DependenciesMacros", package: "swift-dependencies"),
+                .product(name: "CasePaths", package: "swift-case-paths"),
             ]
         ),
         .target(
             name: "RemoteConfigClientLive",
             dependencies: [
-                .product(name: "ComposableArchitecture", package: "swift-composable-architecture"),
+                .product(name: "Dependencies", package: "swift-dependencies"),
+                .product(name: "DependenciesMacros", package: "swift-dependencies"),
+                .product(name: "CasePaths", package: "swift-case-paths"),
                 .product(name: "FirebaseRemoteConfig", package: "firebase-ios-sdk"),
                 "RemoteConfigClient"
             ]
