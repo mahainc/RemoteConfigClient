@@ -17,33 +17,3 @@ extension RemoteConfigClient: TestDependencyKey {
         Self()
     }
 }
-
-extension RemoteConfigClient {
-    public static let happyPath: Self = {
-        return .init(
-            adConfigV2: {
-                AdConfigV2()
-            },
-            adConfigV2Updates: {
-                AsyncStream { continuation in
-                    continuation.yield(AdConfigV2())
-                    continuation.finish()
-                }
-            },
-            adConfig: {
-                RemoteConfigClient.AdConfig()
-            },
-            adConfigUpdates: {
-                AsyncStream { continuation in
-                    continuation.yield(RemoteConfigClient.AdConfig())
-                    continuation.finish()
-                }
-            },
-            fetchAndActivate: {
-                // No-op in happy path.
-            },
-            fetchAndActivateOrUseCache: { },
-            value: { _ in RemoteValue() }
-        )
-    }()
-}

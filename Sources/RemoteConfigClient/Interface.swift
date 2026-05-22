@@ -40,17 +40,9 @@ public struct RemoteValue: Sendable, Equatable {
 
 @DependencyClient
 public struct RemoteConfigClient: Sendable {
-    // v2 — read against the `ad_config_v2` Firebase key. Prefer this in new code;
-    // it exposes the full schema (cooldowns, session caps, per-format kill switches,
-    // experimentId, etc.) without the lossy legacy projection.
-    public var adConfigV2: @Sendable () async throws -> AdConfigV2
-    public var adConfigV2Updates: @Sendable () -> AsyncStream<AdConfigV2> = { .finished }
-
-    // v1 — legacy shape, preserved for existing call sites via `AdConfigV2.toLegacy()`.
-    // Migrate to `adConfigV2` when you need any v2-only field.
-    public var adConfig: @Sendable () async throws -> RemoteConfigClient.AdConfig
-    public var adConfigUpdates: @Sendable () -> AsyncStream<RemoteConfigClient.AdConfig> = { .finished }
-
+    /// Throws when Firebase Remote Config's `fetchAndActivate` callback delivers
+    /// an error. Use `fetchAndActivateOrUseCache` from splash / launch code when
+    /// you'd rather fall back to the previously-activated values silently.
     public var fetchAndActivate: @Sendable () async throws -> Void
 
     /// Tolerant variant of `fetchAndActivate` — swallows errors and logs in DEBUG.
@@ -60,6 +52,86 @@ public struct RemoteConfigClient: Sendable {
 
     /// Reads any top-level Remote Config key as a `RemoteValue`. Returns a
     /// zero-valued struct with `source == .static` when the key is absent.
-    /// Use the typed accessors (`intValue`, `stringValue`, …) to extract.
+    /// Use the typed accessors (`intValue`, `stringValue`, …) to extract, or
+    /// the `decode(_:as:)` extension to JSON-decode the payload.
     public var value: @Sendable (_ key: String) async -> RemoteValue = { _ in RemoteValue() }
+
+    /// Per-key live stream. Yields the current value on subscribe, then re-emits
+    /// every time Firebase activates a change that touches this key. The stream
+    /// finishes when the consumer cancels iteration.
+    public var valueUpdates: @Sendable (_ key: String) -> AsyncStream<RemoteValue> = { _ in .finished }
+}
+
+// MARK: - Configuration
+
+extension RemoteConfigClient {
+    /// Tunables for the live actor. Passed once at app startup via
+    /// `RemoteConfigClient.live(configuration:)`.
+    public struct Configuration: Sendable {
+        /// Forwarded to `RemoteConfigSettings.minimumFetchInterval`. Set to 0 in
+        /// development for unthrottled fetches; default 3600 matches Firebase's
+        /// recommended production cadence.
+        public var minimumFetchInterval: TimeInterval
+
+        /// Name (without extension) of a bundled plist to load as defaults via
+        /// `setDefaults(fromPlist:)`. `nil` skips the call.
+        public var defaultsPlistName: String?
+
+        /// Whether to register `addOnConfigUpdateListener` so live updates fan
+        /// out to `valueUpdates` / `decodeUpdates` subscribers. Disable in test
+        /// hosts that don't ship Firebase.
+        public var enableLiveUpdateListener: Bool
+
+        public init(
+            minimumFetchInterval: TimeInterval = 3600,
+            defaultsPlistName: String? = "RemoteConfigDefaults",
+            enableLiveUpdateListener: Bool = true
+        ) {
+            self.minimumFetchInterval = minimumFetchInterval
+            self.defaultsPlistName = defaultsPlistName
+            self.enableLiveUpdateListener = enableLiveUpdateListener
+        }
+
+        public static let `default` = Configuration()
+    }
+}
+
+// MARK: - Generic decode helpers
+
+extension RemoteConfigClient {
+    /// Reads `key`'s `stringValue` and JSON-decodes it as `T`. Returns `nil`
+    /// when the key is absent, empty, or fails to decode.
+    public func decode<T: Decodable & Sendable>(
+        _ key: String,
+        as type: T.Type = T.self,
+        decoder: JSONDecoder = JSONDecoder()
+    ) async -> T? {
+        let raw = await value(key).stringValue
+        guard !raw.isEmpty, let data = raw.data(using: .utf8) else { return nil }
+        return try? decoder.decode(T.self, from: data)
+    }
+
+    /// Per-key live stream of successfully-decoded `T`. Emissions that fail to
+    /// decode (empty raw, malformed JSON, schema drift) are skipped silently —
+    /// subscribers only see clean values. Cancels the underlying `valueUpdates`
+    /// task when the consumer stops iterating.
+    public func decodeUpdates<T: Decodable & Sendable>(
+        _ key: String,
+        as type: T.Type = T.self,
+        decoder: JSONDecoder = JSONDecoder()
+    ) -> AsyncStream<T> {
+        AsyncStream { continuation in
+            let task = Task {
+                for await rv in valueUpdates(key) {
+                    let raw = rv.stringValue
+                    guard !raw.isEmpty, let data = raw.data(using: .utf8) else { continue }
+                    if let decoded = try? decoder.decode(T.self, from: data) {
+                        continuation.yield(decoded)
+                    }
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
 }

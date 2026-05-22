@@ -4,21 +4,20 @@ import Dependencies
 import RemoteConfigClient
 
 extension RemoteConfigClient: DependencyKey {
+    /// Default live instance used by `@Dependency(\.remoteConfigClient)`. Apps
+    /// that need to override fetch interval, defaults plist name, or disable
+    /// the live-update listener should use `live(configuration:)` instead.
     public static var liveValue: Self {
-		let actor = RemoteConfigActor()
+        live()
+    }
+
+    /// Builds a live `RemoteConfigClient` against Firebase Remote Config using
+    /// the given `Configuration`. Call once at app startup if you need to
+    /// override defaults (e.g. `minimumFetchInterval: 0` in development, or
+    /// `defaultsPlistName: nil` for apps that don't ship a defaults plist).
+    public static func live(configuration: Configuration = .default) -> Self {
+        let actor = RemoteConfigActor(configuration: configuration)
         return RemoteConfigClient(
-            adConfigV2: {
-                try await actor.getAdConfigV2()
-            },
-            adConfigV2Updates: {
-                actor.adConfigV2Updates()
-            },
-            adConfig: {
-                try await actor.getAdConfig()
-            },
-            adConfigUpdates: {
-                actor.adConfigUpdates()
-            },
             fetchAndActivate: {
                 try await actor.fetchAndActivate()
             },
@@ -32,23 +31,10 @@ extension RemoteConfigClient: DependencyKey {
                 }
             },
             value: { key in
-                let rcValue = RemoteConfig.remoteConfig().configValue(forKey: key)
-                let source: RemoteValue.Source = {
-                    switch rcValue.source {
-                    case .remote:  return .remote
-                    case .default: return .default
-                    case .static:  return .static
-                    @unknown default: return .static
-                    }
-                }()
-                return RemoteValue(
-                    stringValue: rcValue.stringValue,
-                    intValue: rcValue.numberValue.intValue,
-                    boolValue: rcValue.boolValue,
-                    doubleValue: rcValue.numberValue.doubleValue,
-                    dataValue: rcValue.dataValue,
-                    source: source
-                )
+                RemoteConfigActor.readValue(forKey: key)
+            },
+            valueUpdates: { key in
+                actor.valueUpdates(forKey: key)
             }
         )
     }
