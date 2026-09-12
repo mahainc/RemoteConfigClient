@@ -1,8 +1,8 @@
 // The Swift Programming Language
 // https://docs.swift.org/swift-book
 
-import Foundation
 import DependenciesMacros
+import Foundation
 
 /// Type-erased view over a single Remote Config entry. Mirrors Firebase's
 /// `RemoteConfigValue` accessors so callers pick the type they need; missing
@@ -48,7 +48,7 @@ public struct RemoteConfigClient: Sendable {
     /// Tolerant variant of `fetchAndActivate` — swallows errors and logs in DEBUG.
     /// Use this from splash / app-launch code when you'd rather fall back to the last
     /// known config than surface a user-visible error.
-    public var fetchAndActivateOrUseCache: @Sendable () async -> Void = { }
+    public var fetchAndActivateOrUseCache: @Sendable () async -> Void = {}
 
     /// Reads any top-level Remote Config key as a `RemoteValue`. Returns a
     /// zero-valued struct with `source == .static` when the key is absent.
@@ -60,6 +60,13 @@ public struct RemoteConfigClient: Sendable {
     /// every time Firebase activates a change that touches this key. The stream
     /// finishes when the consumer cancels iteration.
     public var valueUpdates: @Sendable (_ key: String) -> AsyncStream<RemoteValue> = { _ in .finished }
+
+    /// Fetches and activates, then reads every key Firebase knows about as
+    /// `[key: stringValue]`. Remote entries win over bundled defaults, including
+    /// when the remote value is an empty string. `minimumFetchInterval` throttles
+    /// this call only and leaves the shared settings alone — pass `nil` to keep
+    /// the configured interval, or `0` to force a round trip to the backend.
+    public var fetchAndSnapshot: @Sendable (_ minimumFetchInterval: TimeInterval?) async throws -> [String: String]
 }
 
 // MARK: - Configuration

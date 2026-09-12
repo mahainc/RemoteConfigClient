@@ -1,4 +1,3 @@
-
 import Dependencies
 @preconcurrency import FirebaseRemoteConfig
 import RemoteConfigClient
@@ -26,7 +25,9 @@ extension RemoteConfigClient: DependencyKey {
                     try await actor.fetchAndActivate()
                 } catch {
                     #if DEBUG
-                    print("[RemoteConfigClient] fetchAndActivate failed: \(error.localizedDescription); using cached/default values")
+                    print(
+                        "[RemoteConfigClient] fetchAndActivate failed: \(error.localizedDescription); using cached/default values"
+                    )
                     #endif
                 }
             },
@@ -35,6 +36,9 @@ extension RemoteConfigClient: DependencyKey {
             },
             valueUpdates: { key in
                 actor.valueUpdates(forKey: key)
+            },
+            fetchAndSnapshot: { minimumFetchInterval in
+                try await actor.fetchAndSnapshot(minimumFetchInterval: minimumFetchInterval)
             }
         )
     }
