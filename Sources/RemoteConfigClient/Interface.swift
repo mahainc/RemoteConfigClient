@@ -67,6 +67,9 @@ public struct RemoteConfigClient: Sendable {
     /// this call only and leaves the shared settings alone — pass `nil` to keep
     /// the configured interval, or `0` to force a round trip to the backend.
     public var fetchAndSnapshot: @Sendable (_ minimumFetchInterval: TimeInterval?) async throws -> [String: String]
+
+    /// Host-bound funnel policy; see ``FunnelSettings``.
+    public var funnelSettings: @Sendable () -> FunnelSettings = { FunnelSettings() }
 }
 
 // MARK: - Configuration
@@ -74,6 +77,31 @@ public struct RemoteConfigClient: Sendable {
 extension RemoteConfigClient {
     /// Tunables for the live actor. Passed once at app startup via
     /// `RemoteConfigClient.live(configuration:)`.
+    /// The funnel's own policy: which keys it cannot start without, and how fresh the
+    /// fetch has to be. Separate from ``Configuration`` on purpose — the generic client
+    /// caches for an hour by default, while the funnel is expected to read fresh config
+    /// every launch, and collapsing the two would silently hand the funnel stale config.
+    public struct FunnelSettings: Sendable, Equatable {
+        /// What the funnel ships expecting. Overridable so a host with a different funnel
+        /// schema does not have to fork anything.
+        public static let defaultRequiredKeys = ["iap_config", "ad_config"]
+
+        /// A snapshot missing any of these fails outright rather than handing the funnel a
+        /// partial config it would misread as "nothing is configured".
+        public let requiredKeys: [String]
+
+        /// Forwarded to ``fetchAndSnapshot`` for the funnel's call only.
+        public let minimumFetchInterval: TimeInterval
+
+        public init(
+            requiredKeys: [String] = FunnelSettings.defaultRequiredKeys,
+            minimumFetchInterval: TimeInterval = 0
+        ) {
+            self.requiredKeys = requiredKeys
+            self.minimumFetchInterval = minimumFetchInterval
+        }
+    }
+
     public struct Configuration: Sendable {
         /// Forwarded to `RemoteConfigSettings.minimumFetchInterval`. Set to 0 in
         /// development for unthrottled fetches; default 3600 matches Firebase's

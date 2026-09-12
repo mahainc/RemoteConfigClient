@@ -14,7 +14,10 @@ extension RemoteConfigClient: DependencyKey {
     /// the given `Configuration`. Call once at app startup if you need to
     /// override defaults (e.g. `minimumFetchInterval: 0` in development, or
     /// `defaultsPlistName: nil` for apps that don't ship a defaults plist).
-    public static func live(configuration: Configuration = .default) -> Self {
+    public static func live(
+        configuration: Configuration = .default,
+        funnelSettings: FunnelSettings = FunnelSettings()
+    ) -> Self {
         let actor = RemoteConfigActor(configuration: configuration)
         return RemoteConfigClient(
             fetchAndActivate: {
@@ -39,7 +42,8 @@ extension RemoteConfigClient: DependencyKey {
             },
             fetchAndSnapshot: { minimumFetchInterval in
                 try await actor.fetchAndSnapshot(minimumFetchInterval: minimumFetchInterval)
-            }
+            },
+            funnelSettings: { funnelSettings }
         )
     }
 }
