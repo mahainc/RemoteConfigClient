@@ -26,7 +26,7 @@ let package = Package(
         .package(url: "https://github.com/firebase/firebase-ios-sdk.git", from: "12.13.0"),
         // Pinned exactly, unlike the rest: RemoteConfigFunnelProvider conforms to
         // FunnelClient's Config.Providing port, which moves in major versions.
-        .package(url: "https://github.com/mahainc/FunnelClient.git", exact: "7.0.0"),
+        .package(url: "https://github.com/mahainc/FunnelClient.git", from: "7.0.0"),
     ],
     targets: [
         .target(
