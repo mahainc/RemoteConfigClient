@@ -18,13 +18,13 @@ public enum RemoteConfigFunnelError: Error, CustomStringConvertible {
     }
 }
 
-/// Serves `FunnelClient.Config.Providing` from the client itself, so a host reaches it
+/// Serves `FunnelClient.Telemetry.Config.Providing` from the client itself, so a host reaches it
 /// through the dependency key it already has — `@Dependency(\.remoteConfigClient)`.
 ///
 /// The funnel's policy travels in ``RemoteConfigClient/FunnelSettings`` rather than being
 /// baked in here, which keeps the generic client free of funnel vocabulary while still
 /// letting the host override what the funnel refuses to start without.
-extension RemoteConfigClient: FunnelClient.Config.Providing {
+extension RemoteConfigClient: FunnelClient.Telemetry.Config.Providing {
     public func snapshot() async throws -> [String: String] {
         let settings = funnelSettings()
         let values = try await fetchAndSnapshot(minimumFetchInterval: settings.minimumFetchInterval)
